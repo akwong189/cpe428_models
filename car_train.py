@@ -7,15 +7,16 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-# load mat file for labels
-cars_annos_raw = scipy.io.loadmat('cars_annos.mat')
-class_names_raw = cars_annos_raw['class_names'][0]
-# ('relative_im_path', 'O'), ('bbox_x1', 'O'), ('bbox_y1', 'O'), ('bbox_x2', 'O'), ('bbox_y2', 'O'), ('class', 'O'), ('test', 'O') <=== annos
-annos = cars_annos_raw['annotations'][0]
 
 LOAD_NEW = False
 
 if LOAD_NEW:
+    # load mat file for labels
+    cars_annos_raw = scipy.io.loadmat('cars_annos.mat')
+    class_names_raw = cars_annos_raw['class_names'][0]
+    # ('relative_im_path', 'O'), ('bbox_x1', 'O'), ('bbox_y1', 'O'), ('bbox_x2', 'O'), ('bbox_y2', 'O'), ('class', 'O'), ('test', 'O') <=== annos
+    annos = cars_annos_raw['annotations'][0]
+    
     df = pd.DataFrame(columns=['img_path', 'label', 'x1', 'y1', 'x2', 'y2'])
     curr = []
     i = -1
@@ -40,7 +41,7 @@ if LOAD_NEW:
     print(curr)
     df.to_csv("car_ims.csv")
 else:
-    df = df.read_csv("car_ims.csv")
+    df = pd.read_csv("car_ims.csv")
 
 train_df, test_df = train_test_split(df, test_size=0.2)
 
@@ -56,7 +57,7 @@ print(len(set(train_df.label.values)), len(set(test_df.label.values)))
 
 AUTO = tf.data.experimental.AUTOTUNE
 BATCH_SIZE = 32
-IMG_SIZE = (420, 420)
+IMG_SIZE = (640, 640)
 
 @tf.function
 def preprocess(image_name, label, bbox):
@@ -98,15 +99,22 @@ def get_model():
     x = base_model(inputs, training=False)
     x = tf.keras.layers.GlobalAveragePooling2D()(x)
     x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.Dropout(0.2)(x) # dropout may not be needed
 
     # perform label classification
-    classifier = tf.keras.layers.Dropout(0.2)(x)
+    # add more dense nets here
+    # classifier = tf.keras.layers.Dense(units=512, activation="relu")(x)
+    classifier = tf.keras.layers.Dense(units=256, activation="relu")(x)
+    # classifier = tf.keras.layers.Dropout(0.5)(classifier) # dropout may not be needed
+    classifier = tf.keras.layers.Dense(units=128, activation="relu")(classifier)
+    classifier = tf.keras.layers.Dropout(0.5)(classifier) # dropout may not be needed
     classifier = tf.keras.layers.Dense(units=49, activation='softmax', name='label')(classifier)
 
     # perform bounding box regression
-    regression = tf.keras.layers.Dropout(0.5)(x)
-    regression = tf.keras.layers.Dense(units=128, activation="relu")(x)
-    regression = tf.keras.layers.Dense(units=64, activation="relu")(regression)
+    regression = tf.keras.layers.Dense(units=256, activation="relu")(x)
+    # regression = tf.keras.layers.Dropout(0.5)(regression) # dropout may not be needed
+    regression = tf.keras.layers.Dense(units=128, activation="relu")(regression)
+    # regression = tf.keras.layers.Dropout(0.5)(regression) # dropout may not be needed
     regression = tf.keras.layers.Dense(units=4, activation='sigmoid', name='bbox')(regression)
 
     model = tf.keras.Model(inputs, outputs=[classifier, regression])
@@ -126,6 +134,9 @@ model = get_model()
 losses = {'label': 'sparse_categorical_crossentropy',
           'bbox': 'mse'}
 
+metrics = {'label': "accuracy",
+           'bbox': "mae"}
+
 loss_weights = {'label': 1.0,
                 'bbox': 1.0}
 
@@ -133,12 +144,13 @@ base_learning_rate = 0.0001
 model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=base_learning_rate),
               loss=losses,
               loss_weights=loss_weights,
-              metrics=['accuracy'])
+              metrics=metrics)
+              #metrics=['accuracy', tf.keras.metrics.MeanAbsoluteError()])
 
 # reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
 #                              patience=5, min_lr=0.001)
 
-early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_label_loss', mode='min', patience=5, restore_best_weights=True)
+early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_label_loss', mode='min', patience=10, restore_best_weights=True)
 
 model.fit(
   trainloader,
@@ -146,3 +158,5 @@ model.fit(
   epochs=100,
   callbacks=[early_stop]
 )
+
+model.save("train23.h5", save_format="h5")
