@@ -57,7 +57,7 @@ print(len(set(train_df.label.values)), len(set(test_df.label.values)))
 
 AUTO = tf.data.experimental.AUTOTUNE
 BATCH_SIZE = 32
-IMG_SIZE = (640, 640)
+IMG_SIZE = (720, 720)
 
 @tf.function
 def preprocess(image_name, label, bbox):
@@ -89,7 +89,7 @@ num_classes = 49
 input_shape = IMG_SIZE + (3,)
 
 def get_model():
-    base_model = tf.keras.applications.EfficientNetB0(input_shape=input_shape,
+    base_model = tf.keras.applications.EfficientNetB2(input_shape=input_shape,
                                                         include_top=False,
                                                         weights='imagenet')
     base_model.trainable = False
@@ -105,9 +105,9 @@ def get_model():
     # add more dense nets here
     # classifier = tf.keras.layers.Dense(units=512, activation="relu")(x)
     classifier = tf.keras.layers.Dense(units=256, activation="relu")(x)
-    # classifier = tf.keras.layers.Dropout(0.5)(classifier) # dropout may not be needed
+    classifier = tf.keras.layers.Dropout(0.2)(classifier) # dropout may not be needed
     classifier = tf.keras.layers.Dense(units=128, activation="relu")(classifier)
-    classifier = tf.keras.layers.Dropout(0.5)(classifier) # dropout may not be needed
+    classifier = tf.keras.layers.Dropout(0.2)(classifier) # dropout may not be needed
     classifier = tf.keras.layers.Dense(units=49, activation='softmax', name='label')(classifier)
 
     # perform bounding box regression
@@ -156,7 +156,9 @@ model.fit(
   trainloader,
   validation_data=testloader,
   epochs=100,
-  callbacks=[early_stop]
+  callbacks=[early_stop],
 )
 
-model.save("train23.h5", save_format="h5")
+model.evaluate(testloader)
+
+model.save("train25.h5", save_format="h5")
