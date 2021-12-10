@@ -10,6 +10,7 @@ from sklearn.model_selection import train_test_split
 
 LOAD_NEW = False
 
+# if loading from new dataset without csv, load the mat file and parse outputting the csv and a dataframe
 if LOAD_NEW:
     # load mat file for labels
     cars_annos_raw = scipy.io.loadmat('cars_annos.mat')
@@ -43,18 +44,22 @@ if LOAD_NEW:
 else:
     df = pd.read_csv("car_ims.csv")
 
+# split the dataset into training and testing data
 train_df, test_df = train_test_split(df, test_size=0.2)
 
+# split training dataset into 3 arrays: image paths, labels, and bounding box
 train_image_names = train_df.img_path.values
 train_labels = train_df.label.values.astype(np.float32)
 train_bbox = train_df[['x1', 'y1', 'x2', 'y2']].values.astype(np.float32)
 
+# split testing dataset into 3 arrays: image paths, labels, and bounding box
 test_image_names = test_df.img_path.values
 test_labels = test_df.label.values.astype(np.float32)
 test_bbox = test_df[['x1', 'y1', 'x2', 'y2']].values.astype(np.float32)
 
 print(len(set(train_df.label.values)), len(set(test_df.label.values)))
 
+# auto load into the GPU for preprocessing (faster than previous method and allows for larger images)
 AUTO = tf.data.experimental.AUTOTUNE
 BATCH_SIZE = 32
 IMG_SIZE = (720, 720)
@@ -85,6 +90,7 @@ testloader = (
     .prefetch(AUTO)
 )
 
+# develop the model
 num_classes = 49
 input_shape = IMG_SIZE + (3,)
 
@@ -150,6 +156,7 @@ model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=base_learning_rat
 # reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
 #                              patience=5, min_lr=0.001)
 
+# early stop model if label loss stops improving
 early_stop = tf.keras.callbacks.EarlyStopping(monitor='val_label_loss', mode='min', patience=10, restore_best_weights=True)
 
 model.fit(
